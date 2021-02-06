@@ -107,78 +107,68 @@ int main() {
             sem_post(sem_pointer);
         }
         */
+        int value;
+        int count = sem_getvalue(sem_pointer, &value);
+        if (value++ < 2) {
+            sem_post(sem_pointer);
+        }
+        printf("Значение семафора до цикла: count = %d, value = %d\n", count, value);
 
         while(1) {
+            //char *str = getstring();
+            sem_getvalue(sem_pointer, &value);
+            //printf("Значение семафора: %d", value);
+            if (value == 2) {
+                if (mapping_file2[0] != '\0') {
+                    sem_wait(sem_pointer);
+                    int count = sem_getvalue(sem_pointer, &value);
+                    printf("Значение семафора: count = %d, value = %d\n", count, value);
+                    printf("Обнаружено, что в родительский процесс отправлено сообщение\n");
+                    char *string = (char*) malloc(strlen(mapping_file2) * sizeof(char));
+                    strcpy(string, mapping_file2);
+                    printf("Error string %s\n", string);
+                    memset(mapping_file2, '\0', getpagesize());
+                    free(string);
+                    sem_post(sem_pointer);
+                    continue;
+                }
+                sem_wait(sem_pointer);
+                char *str = getstring();
+                if (str[0] != EOF) {
+                    printf("Длинная строка прочитана!%s\n", str);
+                    strcpy(mapping_file, str);
+                    sem_post(sem_pointer);    
+                } else {
+                    mapping_file[0] = EOF;
+                    sem_post(sem_pointer);
+                    break;
+                }
+            } else {
+                if (mapping_file2[0] != '\0') {
+                    sem_wait(sem_pointer);
+                    int count = sem_getvalue(sem_pointer, &value);
+                    printf("Значение семафора: count = %d, value = %d\n", count, value);
+                    printf("Обнаружено, что в родительский процесс отправлено сообщение\n");
+                    char *string = (char*) malloc(strlen(mapping_file2) * sizeof(char));
+                    strcpy(string, mapping_file2);
+                    printf("Error string %s\n", string);
+                    memset(mapping_file2, '\0', getpagesize());
+                    free(string);
+                    sem_post(sem_pointer);
+                    continue;
+                }
+            }
+
             /*
-            char *str = getstring();
-            printf("Один\n");
-            sem_wait(sem_pointer);
+            printf("1...............................\n");
             if (mapping_file2[0] != '\0') {
+                sem_wait(sem_pointer);
+                int count = sem_getvalue(sem_pointer, &value);
+                printf("Значение семафора: count = %d, value = %d\n", count, value);
                 printf("Обнаружено, что в родительский процесс отправлено сообщение\n");
                 char *string = (char*) malloc(strlen(mapping_file2) * sizeof(char));
                 strcpy(string, mapping_file2);
-                printf("Error string %s", string);
-                memset(mapping_file2, '\0', getpagesize());
-                free(string);
-                sem_post(sem_pointer);
-                continue;
-            }
-            printf("Два\n");
-            sem_wait(sem_pointer);
-            if (str[0] != EOF) {
-                //printf("Длинная строка прочитана!%s\n", str);
-                strcpy(mapping_file, str);
-                sem_post(sem_pointer);
-            } else {
-                mapping_file[0] = EOF;
-                sem_post(sem_pointer);
-                break;
-            }
-            printf("Три\n");
-            */
-
-            char *str = getstring();
-            if (str[0] != EOF) {
-                sem_wait(sem_pointer);
-                printf("Длинная строка прочитана!%s\n", str);
-                strcpy(mapping_file, str);
-                sem_post(sem_pointer);
-            } else {
-                mapping_file[0] = EOF;
-                break;
-            }
-            /*
-            if (mapping_file2[0] != '\0') {
-                printf("Обнаружено, что в родительский процесс отправлено сообщение\n");
-                char *string = (char*) malloc(strlen(mapping_file2) * sizeof(char));
-                strcpy(string, mapping_file2);
-                printf("Error string %s", string);
-                memset(mapping_file2, '\0', getpagesize());
-                free(string);
-                sem_post(sem_pointer);
-                continue;
-            }
-            */
-            
-            //printf("Три\n");
-
-
-
-
-
-
-
-
-
-
-
-            
-            if (mapping_file2[0] != '\0') {
-                sem_wait(sem_pointer);
-                printf("Обнаружено, что в родительский процесс отправлено сообщение");
-                char *string = (char*) malloc(strlen(mapping_file2) * sizeof(char));
-                strcpy(string, mapping_file2);
-                printf("Error string %s", string);
+                printf("Error string %s\n", string);
                 memset(mapping_file2, '\0', getpagesize());
                 free(string);
                 sem_post(sem_pointer);
@@ -198,12 +188,16 @@ int main() {
                 }
                 //sem_post(sem_pointer);
             }
-            
+            printf("2...............................\n");
+            */
             fflush(stdout);
         }
     }
 
     if (pid == 0) {
+        //munmap(mapping_file, getpagesize());
+        //close(fd2);
+        //sem_close(sem_pointer);
         printf("Дочерний процесс\n");
         //dup2(fileno(file_to_write), STDOUT_FILENO);
         execl("./child.out", "child", NULL);

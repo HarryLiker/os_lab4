@@ -48,35 +48,31 @@ int main(int argc, char *argv[]) {
         exit(EXIT_FAILURE);
     }
     */
+
     char string[256];
+    int value;
     while(1) {
         if (mapping_file[0] != '\0') {
+            int value;
+            int count = sem_getvalue(sem_pointer, &value);
+            //printf("Значение семафора в дочернем процессе: %d\n", value);
             sem_wait(sem_pointer);
-            //printf("Mapping file[0] = %c", mapping_file[0]);
             if (mapping_file[0] == EOF) {
-                //printf("Выполнен выход!!!!!!!!!!!!!\n");
+                printf("Выполнен выход!!!!!!!!!!!!!\n");
                 sem_post(sem_pointer);
                 break;
             }
-            //counter = sem_wait(sem_pointer);
-            //int value;
-            //sem_signal(sem_pointer);
-            //sem_getvalue(sem_pointer, &value);
-            //printf("Значение счётчика семафора в начале: %d\n", counter);
             strcpy(string, mapping_file);
-            //printf("В дочернем процессе прочитана строка: %s\n", string);
-            //printf("Значение счётчика семафора в середине: %d\n", counter);
             if (string_validation(string) == 0) {
                 printf("%s\n", string);
-                printf("Верная строка: %s", string);
+                printf("Верная строка: %s\n", string);
             } else {
                 printf("Неверная строка! STR: %s\n", string);
                 strcpy(mapping_file2, string);
-                //printf("Первый символ в mapping_file_2: %c\n", mapping_file2[0]);
                 memset(mapping_file, '\0', getpagesize());
+                printf("Строка была скопирована в mapping_file_2\n");
             }
             fflush(stdout);
-            //printf("Значение счётчика семафора в конце: %d\n", counter);
             memset(mapping_file, '\0', getpagesize());
             sem_post(sem_pointer);
         }
@@ -88,8 +84,6 @@ int main(int argc, char *argv[]) {
     munmap(mapping_file2, getpagesize());
     close(fd3);
     sem_close(sem_pointer);
-    //shm_unlink(BackingFile);
-    //shm_unlink(BackingFile2);
     return 0;
     
 }
