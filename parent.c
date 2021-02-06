@@ -1,21 +1,16 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
-#include <pthread.h>
-#include <sys/stat.h>
 #include <sys/types.h>
-#include <sys/mman.h>
-#include <string.h>
+#include <sys/stat.h>
 #include <fcntl.h>
+#include <sys/mman.h>
+#include <threads.h>
+#include <string.h>
+#include <pthread.h>
+#include <semaphore.h>
 
-#define MAP_SIZE 4096
-
-// Пустая строка в качестве сигнала
-char empty = 1;
-char *empty_string = &empty;
-
-char *file1_name = "file1_mapped";
-//char *file2_name = "file2_mapped";
+#include "shrmem.h"
 
 // Функция чтения строки
 char *getstring() {
@@ -45,79 +40,183 @@ char *getstring() {
     return str;
 }
 
+//char *mapping_file_name = "mapping_file_1";
 
 int main() {
-    char *filename;
+    char filename[256];
     printf("Введите имя файла: ");
-    filename = getstring();
-    int file_to_write = open(filename, O_WRONLY | O_CREAT, S_IWRITE | S_IREAD);
-    //int fd1[2]; // Файловый дескриптор 1
-    //int fd2[2]; // Файловый дескриптор 2
-    if (file_to_write < 0) {
-        perror("Can't open file!\n");
-        exit(1);
+    scanf("%s", filename);
+
+
+    //int fd = open(mapping_file_name, O_RDWR | O_CREAT, S_IWRITE | S_IREAD);
+
+    int fd2 = shm_open(BackingFile, O_RDWR | O_CREAT, AccessPerms);
+
+    int fd3 = shm_open(BackingFile2, O_RDWR | O_CREAT, AccessPerms);
+
+    sem_t *sem_pointer = sem_open(SemaphoreName, O_CREAT, AccessPerms, 2);
+    if (sem_pointer == SEM_FAILED) {
+        perror("Can't initialize semaphore!\n");
+        exit(EXIT_FAILURE);
     }
-    // Создание файла для маппинга
-    int fd1 = open(file1_name, O_RDWR | O_CREAT, S_IWRITE | S_IREAD);
-    //int fd2 = open(file2_name, O_RDWR | O_CREAT, S_IWRITE | S_IREAD);
-    if (fd1 < 0) {
-        perror("Can't open file!\n");
-        exit(1);
-    }
-    if (write(fd1, empty_string, sizeof(empty_string)) < 0) {
-        perror("Can't write to file!\n");
-        exit(1);
-    }
+    ftruncate(fd2, getpagesize());
+
+    ftruncate(fd3, getpagesize());
+    //ftruncate(fd, getpagesize());
     /*
-    if (write(fd2, empty_string, sizeof(empty_string)) < 0) {
-        perror("Can't write to file!\n");
-        exit(1);
+    if (fd < 0) {
+        perror("Can't open file!\n");
+        exit(EXIT_FAILURE);
     }
     */
-    char *file1 = mmap(NULL, MAP_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd1, 0);
-    //char *file2 = mmap(NULL, MAP_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd2, 0);
-    if (file1 == MAP_FAILED) {
+    //char *mapping_file = mmap(NULL, getpagesize(), PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+    char *mapping_file = mmap(NULL, getpagesize(), PROT_READ | PROT_WRITE, MAP_SHARED, fd2, 0);
+    if (mapping_file == MAP_FAILED) {
         perror("Can't map a file!\n");
-        exit(2);
+        exit(EXIT_FAILURE);
     }
-    pid_t pid = fork(); // Создание дочернего процесса
+
+    
+    char *mapping_file2 = mmap(NULL, getpagesize(), PROT_READ | PROT_WRITE, MAP_SHARED, fd3, 0);
+    if (mapping_file2 == MAP_FAILED) {
+        perror("Can't map a file!\n");
+        exit(EXIT_FAILURE);
+    }
+    
+
+    //pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
+    memset(mapping_file, '\0', getpagesize());
+    memset(mapping_file2, '\0', getpagesize());
+    FILE *file_to_write = fopen(filename, "w");
+    pid_t pid = fork();
     if (pid < 0) {
-        perror("Can't create child process!\n");
-        exit(3);
-    } else if (pid > 0) { // Родительский процесс
+        perror("Fork error!\n");
+        exit(EXIT_FAILURE);
+    }
+    
+    if (pid > 0) {
+        printf("Родительский процесс\n");
+        //char string[256];
+        /*
+        while (scanf("%s", string) > 0) {
+            sem_wait(sem_pointer);
+            //pthread_mutex_lock(&lock);
+            printf("Прочитана строка: %s\n", string);
+            strcpy(mapping_file, string);
+            //pthread_mutex_unlock(&lock);
+            sem_post(sem_pointer);
+        }
+        */
+
         while(1) {
-            char *s = getstring();
-            //printf("COPIYED STRING: %s\n", s);
-            strcpy(file1, s);
-            if (s[0] == EOF) {
-                printf("LAST STRING: %s", s);
-                //strcpy(file1, s);
+            /*
+            char *str = getstring();
+            printf("Один\n");
+            sem_wait(sem_pointer);
+            if (mapping_file2[0] != '\0') {
+                printf("Обнаружено, что в родительский процесс отправлено сообщение\n");
+                char *string = (char*) malloc(strlen(mapping_file2) * sizeof(char));
+                strcpy(string, mapping_file2);
+                printf("Error string %s", string);
+                memset(mapping_file2, '\0', getpagesize());
+                free(string);
+                sem_post(sem_pointer);
+                continue;
+            }
+            printf("Два\n");
+            sem_wait(sem_pointer);
+            if (str[0] != EOF) {
+                //printf("Длинная строка прочитана!%s\n", str);
+                strcpy(mapping_file, str);
+                sem_post(sem_pointer);
+            } else {
+                mapping_file[0] = EOF;
+                sem_post(sem_pointer);
                 break;
             }
-        }
-        if (munmap(file1, MAP_SIZE) < 0) {
-            perror("Can't unmap file!\n");
-            exit(4);
-        }
-        if (close(fd1) < 0) {
-            perror("Can't close file!\n");
-            exit(5);
-        }
-        if (remove(file1_name) < 0) {
-            perror("Can't delete file!\n");
-            exit(6);
-        }
-    } else { // Дочерний процесс
-        // Перенаправление стандартного ввода для дочернего процесса
+            printf("Три\n");
+            */
 
-        // Перенаправление стаднартного вывода для дочернего процесса
-        if (dup2(file_to_write, STDOUT_FILENO) < 0) {
-            perror("Can't redirect stdout for child process!\n");
-            exit(5);
-        } 
-        char *arr[] = {filename, NULL};
-        execv("./child.out", arr);
-        perror("Can't execute child process!\n");
-        exit(8);
+            char *str = getstring();
+            if (str[0] != EOF) {
+                sem_wait(sem_pointer);
+                printf("Длинная строка прочитана!%s\n", str);
+                strcpy(mapping_file, str);
+                sem_post(sem_pointer);
+            } else {
+                mapping_file[0] = EOF;
+                break;
+            }
+            /*
+            if (mapping_file2[0] != '\0') {
+                printf("Обнаружено, что в родительский процесс отправлено сообщение\n");
+                char *string = (char*) malloc(strlen(mapping_file2) * sizeof(char));
+                strcpy(string, mapping_file2);
+                printf("Error string %s", string);
+                memset(mapping_file2, '\0', getpagesize());
+                free(string);
+                sem_post(sem_pointer);
+                continue;
+            }
+            */
+            
+            //printf("Три\n");
+
+
+
+
+
+
+
+
+
+
+
+            
+            if (mapping_file2[0] != '\0') {
+                sem_wait(sem_pointer);
+                printf("Обнаружено, что в родительский процесс отправлено сообщение");
+                char *string = (char*) malloc(strlen(mapping_file2) * sizeof(char));
+                strcpy(string, mapping_file2);
+                printf("Error string %s", string);
+                memset(mapping_file2, '\0', getpagesize());
+                free(string);
+                sem_post(sem_pointer);
+                continue;
+            } else {
+                sem_wait(sem_pointer);
+                char *str = getstring();
+                if (str[0] != EOF) {
+                    //sem_wait(sem_pointer);
+                    printf("Длинная строка прочитана!%s\n", str);
+                    strcpy(mapping_file, str);
+                    sem_post(sem_pointer);
+                } else {
+                    mapping_file[0] = EOF;
+                    sem_post(sem_pointer);
+                    break;
+                }
+                //sem_post(sem_pointer);
+            }
+            
+            fflush(stdout);
+        }
     }
+
+    if (pid == 0) {
+        printf("Дочерний процесс\n");
+        //dup2(fileno(file_to_write), STDOUT_FILENO);
+        execl("./child.out", "child", NULL);
+        //printf("Ha-ha it writes in file!\n");
+    }
+
+    munmap(mapping_file, getpagesize());
+    close(fd2);
+    munmap(mapping_file2, getpagesize());
+    close(fd3);
+    sem_close(sem_pointer);
+    shm_unlink(BackingFile);
+    shm_unlink(BackingFile2);
+    fclose(file_to_write);
+    return 0;
 }
